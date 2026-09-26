@@ -91,8 +91,7 @@ int Abc_NtkRetime( Abc_Ntk_t * pNtk, int Mode, int nDelayLim, int fForwardOnly, 
         RetValue = Abc_NtkRetimeLValue( pNtk, 500, fVerbose );
         break;
     case 7: // custom retimer
-        printf( "CUSTOM RETIMER: M7 entered.\n" );
-        RetValue = 0;
+        RetValue = Abc_NtkRetimeCustom( pNtk, fUseOldNames, fVerbose );
         break;
     default:
         printf( "Unknown retiming option.\n" );

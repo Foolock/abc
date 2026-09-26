@@ -55,6 +55,7 @@ extern int         Abc_NtkRetime( Abc_Ntk_t * pNtk, int Mode, int nDelayLim, int
 extern int         Abc_NtkRetimeMinDelay( Abc_Ntk_t * pNtk, Abc_Ntk_t * pNtkCopy, int nDelayLim, int nIterLimit, int fForward, int fVerbose );
 /*=== retDirect.c ========================================================*/
 extern int         Abc_NtkRetimeIncremental( Abc_Ntk_t * pNtk, int nDelayLim, int fForward, int fMinDelay, int fOneStep, int fUseOldNames, int fVerbose );
+extern int         Abc_NtkRetimeCustom( Abc_Ntk_t * pNtk, int fUseOldNames, int fVerbose );
 extern void        Abc_NtkRetimeShareLatches( Abc_Ntk_t * pNtk, int fInitial );
 extern int         Abc_NtkRetimeNodeIsEnabled( Abc_Obj_t * pObj, int fForward );
 extern void        Abc_NtkRetimeNode( Abc_Obj_t * pObj, int fForward, int fInitial );

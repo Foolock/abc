@@ -28,6 +28,7 @@ ABC_NAMESPACE_IMPL_START
 ////////////////////////////////////////////////////////////////////////
 
 static int Abc_NtkRetimeOneWay( Abc_Ntk_t * pNtk, int fForward, int fVerbose );
+static int Abc_NtkRetimeOneForwardMove( Abc_Ntk_t * pNtk, int fVerbose );
 
 ////////////////////////////////////////////////////////////////////////
 ///                     FUNCTION DEFINITIONS                         ///
@@ -92,6 +93,61 @@ int Abc_NtkRetimeIncremental( Abc_Ntk_t * pNtk, int nDelayLim, int fForward, int
     if ( !Abc_NtkCheck( pNtk ) )
         fprintf( stdout, "Abc_NtkRetimeForward(): Network check has failed.\n" );
     // return the number of latches saved
+    return nLatches - Abc_NtkLatchNum(pNtk);
+}
+
+int Abc_NtkRetimeCustom( Abc_Ntk_t * pNtk, int fUseOldNames, int fVerbose )
+{
+    Vec_Ptr_t * vBoxes;
+    st__table * tLatches;
+    int nLatches = Abc_NtkLatchNum(pNtk);
+    int nIdMaxStart = Abc_NtkObjNumMax(pNtk);
+    int RetValue;
+    int fMoved;
+
+    if ( Abc_NtkNodeNum(pNtk) == 0 )
+        return 0;
+
+    // Reorder CIs/COs/latch inputs.
+    Abc_NtkOrderCisCos( pNtk );
+
+    // Prepare latches for ABC retiming representation.
+    tLatches = Abc_NtkRetimePrepareLatches( pNtk );
+
+    // Merge equivalent latches before retiming.
+    Abc_NtkRetimeShareLatches( pNtk, 0 );
+
+    // Temporarily remove boxes, following the existing incremental flow.
+    vBoxes = pNtk->vBoxes;
+    pNtk->vBoxes = NULL;
+
+    printf( "CUSTOM RETIMER: M7 entered.\n" );
+
+    // M7 v1: exactly one legal forward move.
+    fMoved = Abc_NtkRetimeOneForwardMove( pNtk, fVerbose );
+
+    // Normalize latches after retiming.
+    Abc_NtkRetimeShareLatches( pNtk, 0 );
+
+    // Restore boxes.
+    pNtk->vBoxes = vBoxes;
+
+    // Restore normal ABC latch representation.
+    RetValue = Abc_NtkRetimeFinalizeLatches(
+        pNtk, tLatches, nIdMaxStart, fUseOldNames );
+    st__free_table( tLatches );
+
+    if ( RetValue == 0 )
+        return 0;
+
+    if ( !Abc_NtkCheck( pNtk ) )
+        fprintf( stdout,
+                 "Abc_NtkRetimeCustom(): Network check has failed.\n" );
+
+    if ( fVerbose )
+        printf( "CUSTOM RETIMER: one-move result = %s.\n",
+                fMoved ? "moved" : "no move" );
+
     return nLatches - Abc_NtkLatchNum(pNtk);
 }
 
@@ -278,6 +334,37 @@ int Abc_NtkRetimeOneWay( Abc_Ntk_t * pNtk, int fForward, int fVerbose )
     return 0;
 }
 
+static int Abc_NtkRetimeOneForwardMove( Abc_Ntk_t * pNtk, int fVerbose )
+{
+    Abc_Obj_t * pObj;
+    int i;
+
+    Abc_NtkRetimeTranferToCopy( pNtk );
+
+    Abc_NtkForEachObj( pNtk, pObj, i )
+    {
+        if ( !Abc_ObjIsNode(pObj) )
+            continue;
+
+        if ( Abc_NtkRetimeNodeIsEnabled( pObj, 1 ) )
+        {
+            if ( fVerbose )
+                printf( "CUSTOM RETIMER: moving node %d forward.\n",
+                        Abc_ObjId(pObj) );
+
+            Abc_NtkRetimeNode( pObj, 1, 1 );
+            Abc_NtkRetimeTranferFromCopy( pNtk );
+            return 1;
+        }
+    }
+
+    Abc_NtkRetimeTranferFromCopy( pNtk );
+
+    if ( fVerbose )
+        printf( "CUSTOM RETIMER: no legal forward move found.\n" );
+
+    return 0;
+}
 
 /**Function*************************************************************
 

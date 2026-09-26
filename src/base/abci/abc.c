@@ -24976,7 +24976,7 @@ int Abc_CommandRetime( Abc_Frame_t * pAbc, int argc, char ** argv )
         return 0;
     }
 
-    if ( Mode < 0 || Mode > 6 )
+    if ( Mode < 0 || Mode > 7 )
     {
         Abc_Print( -1, "The mode (%d) is incorrect. Retiming is not performed.\n", Mode );
         return 0;
@@ -25024,6 +25024,7 @@ usage:
     Abc_Print( -2, "\t             4: forward and backward min-delay retiming\n" );
     Abc_Print( -2, "\t             5: mode 3 followed by mode 4\n" );
     Abc_Print( -2, "\t             6: Pan's optimum-delay retiming using binary search\n" );
+    Abc_Print( -2, "\t             7: custom retiming\n" );
     Abc_Print( -2, "\t-M num : the retiming algorithm to use [default = %d]\n", Mode );
     Abc_Print( -2, "\t-D num : the minimum delay target (0=unused) [default = %d]\n", nDelayLim );
     Abc_Print( -2, "\t-f     : enables forward-only retiming in modes 3,4,5 [default = %s]\n", fForward? "yes": "no" );

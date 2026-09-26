@@ -51,7 +51,7 @@ int Abc_NtkRetime( Abc_Ntk_t * pNtk, int Mode, int nDelayLim, int fForwardOnly, 
     int RetValue = 0;
     abctime clkTotal = Abc_Clock();
     int nNodesOld, nLatchesOld;
-    assert( Mode > 0 && Mode < 7 );
+    assert( Mode > 0 && Mode < 8 );
     assert( !fForwardOnly || !fBackwardOnly );
 
     // cleanup the network
@@ -89,6 +89,10 @@ int Abc_NtkRetime( Abc_Ntk_t * pNtk, int Mode, int nDelayLim, int fForwardOnly, 
         break;
     case 6: // Pan's algorithm
         RetValue = Abc_NtkRetimeLValue( pNtk, 500, fVerbose );
+        break;
+    case 7: // custom retimer
+        printf( "CUSTOM RETIMER: M7 entered.\n" );
+        RetValue = 0;
         break;
     default:
         printf( "Unknown retiming option.\n" );

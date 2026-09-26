@@ -29,6 +29,7 @@ ABC_NAMESPACE_IMPL_START
 
 static int Abc_NtkRetimeOneWay( Abc_Ntk_t * pNtk, int fForward, int fVerbose );
 static int Abc_NtkRetimeOneForwardMove( Abc_Ntk_t * pNtk, int fVerbose );
+static Vec_Ptr_t * Abc_NtkRetimeCollectForwardMoves( Abc_Ntk_t * pNtk );
 
 ////////////////////////////////////////////////////////////////////////
 ///                     FUNCTION DEFINITIONS                         ///
@@ -334,12 +335,13 @@ int Abc_NtkRetimeOneWay( Abc_Ntk_t * pNtk, int fForward, int fVerbose )
     return 0;
 }
 
-static int Abc_NtkRetimeOneForwardMove( Abc_Ntk_t * pNtk, int fVerbose )
+static Vec_Ptr_t * Abc_NtkRetimeCollectForwardMoves( Abc_Ntk_t * pNtk )
 {
+    Vec_Ptr_t * vCandidates;
     Abc_Obj_t * pObj;
     int i;
 
-    Abc_NtkRetimeTranferToCopy( pNtk );
+    vCandidates = Vec_PtrAlloc( 16 );
 
     Abc_NtkForEachObj( pNtk, pObj, i )
     {
@@ -347,23 +349,50 @@ static int Abc_NtkRetimeOneForwardMove( Abc_Ntk_t * pNtk, int fVerbose )
             continue;
 
         if ( Abc_NtkRetimeNodeIsEnabled( pObj, 1 ) )
-        {
-            if ( fVerbose )
-                printf( "CUSTOM RETIMER: moving node %d forward.\n",
-                        Abc_ObjId(pObj) );
-
-            Abc_NtkRetimeNode( pObj, 1, 1 );
-            Abc_NtkRetimeTranferFromCopy( pNtk );
-            return 1;
-        }
+            Vec_PtrPush( vCandidates, pObj );
     }
 
-    Abc_NtkRetimeTranferFromCopy( pNtk );
+    return vCandidates;
+}
+
+static int Abc_NtkRetimeOneForwardMove( Abc_Ntk_t * pNtk, int fVerbose )
+{
+    Vec_Ptr_t * vCandidates;
+    Abc_Obj_t * pObj;
+    int nCandidates;
+
+    Abc_NtkRetimeTranferToCopy( pNtk );
+
+    vCandidates = Abc_NtkRetimeCollectForwardMoves( pNtk );
+    nCandidates = Vec_PtrSize( vCandidates );
 
     if ( fVerbose )
-        printf( "CUSTOM RETIMER: no legal forward move found.\n" );
+        printf( "CUSTOM RETIMER: legal forward moves = %d.\n",
+                nCandidates );
 
-    return 0;
+    if ( nCandidates == 0 )
+    {
+        Vec_PtrFree( vCandidates );
+        Abc_NtkRetimeTranferFromCopy( pNtk );
+
+        if ( fVerbose )
+            printf( "CUSTOM RETIMER: no legal forward move found.\n" );
+
+        return 0;
+    }
+
+    pObj = (Abc_Obj_t *)Vec_PtrEntry( vCandidates, 0 );
+
+    if ( fVerbose )
+        printf( "CUSTOM RETIMER: selected candidate 0, node %d.\n",
+                Abc_ObjId(pObj) );
+
+    Abc_NtkRetimeNode( pObj, 1, 1 );
+
+    Vec_PtrFree( vCandidates );
+    Abc_NtkRetimeTranferFromCopy( pNtk );
+
+    return 1;
 }
 
 /**Function*************************************************************

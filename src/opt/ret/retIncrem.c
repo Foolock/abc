@@ -9,7 +9,7 @@
   Synopsis    [Incremental retiming in one direction.]
 
   Author      [Alan Mishchenko]
-  
+
   Affiliation [UC Berkeley]
 
   Date        [Ver. 1.0. Started - Oct 31, 2006.]
@@ -27,9 +27,15 @@ ABC_NAMESPACE_IMPL_START
 ///                        DECLARATIONS                              ///
 ////////////////////////////////////////////////////////////////////////
 
+static unsigned s_CustomSeed = 1;
+static int s_CustomMaxMoves = 100;
+
 static int Abc_NtkRetimeOneWay( Abc_Ntk_t * pNtk, int fForward, int fVerbose );
-static int Abc_NtkRetimeOneForwardMove( Abc_Ntk_t * pNtk, int fVerbose );
+static int Abc_NtkRetimeOneForwardMove( Abc_Ntk_t * pNtk, unsigned * pRandState, int fVerbose );
 static Vec_Ptr_t * Abc_NtkRetimeCollectForwardMoves( Abc_Ntk_t * pNtk );
+static unsigned Abc_NtkRetimeRandomNext( unsigned * pState );
+void Abc_NtkRetimeCustomSetParams( unsigned Seed, int nMaxMoves );
+static unsigned Abc_NtkRetimeRandomSeed( unsigned Seed );
 
 ////////////////////////////////////////////////////////////////////////
 ///                     FUNCTION DEFINITIONS                         ///
@@ -40,7 +46,7 @@ static Vec_Ptr_t * Abc_NtkRetimeCollectForwardMoves( Abc_Ntk_t * pNtk );
   Synopsis    [Performs retiming in one direction.]
 
   Description [Currently does not retime over black boxes.]
-               
+
   SideEffects []
 
   SeeAlso     []
@@ -59,7 +65,7 @@ int Abc_NtkRetimeIncremental( Abc_Ntk_t * pNtk, int nDelayLim, int fForward, int
         return 0;
     // reorder CI/CO/latch inputs
     Abc_NtkOrderCisCos( pNtk );
-    if ( fMinDelay ) 
+    if ( fMinDelay )
     {
         nIterLimit = fOneStep? 1 : 2 * Abc_NtkLevel(pNtk);
         pNtkCopy = Abc_NtkDup( pNtk );
@@ -69,7 +75,7 @@ int Abc_NtkRetimeIncremental( Abc_Ntk_t * pNtk, int nDelayLim, int fForward, int
     // collect latches and remove CIs/COs
     tLatches = Abc_NtkRetimePrepareLatches( pNtk );
     // share the latches
-    Abc_NtkRetimeShareLatches( pNtk, 0 );    
+    Abc_NtkRetimeShareLatches( pNtk, 0 );
     // save boxes
     vBoxes = pNtk->vBoxes;  pNtk->vBoxes = NULL;
     // perform the retiming
@@ -77,10 +83,10 @@ int Abc_NtkRetimeIncremental( Abc_Ntk_t * pNtk, int nDelayLim, int fForward, int
         Abc_NtkRetimeMinDelay( pNtk, pNtkCopy, nDelayLim, nIterLimit, fForward, fVerbose );
     else
         Abc_NtkRetimeOneWay( pNtk, fForward, fVerbose );
-    if ( fMinDelay ) 
+    if ( fMinDelay )
         Abc_NtkDelete( pNtkCopy );
     // share the latches
-    Abc_NtkRetimeShareLatches( pNtk, 0 );    
+    Abc_NtkRetimeShareLatches( pNtk, 0 );
     // restore boxes
     pNtk->vBoxes = vBoxes;
     // finalize the latches
@@ -105,6 +111,10 @@ int Abc_NtkRetimeCustom( Abc_Ntk_t * pNtk, int fUseOldNames, int fVerbose )
     int nIdMaxStart = Abc_NtkObjNumMax(pNtk);
     int RetValue;
     int fMoved;
+    unsigned RandState = Abc_NtkRetimeRandomSeed( s_CustomSeed );
+    int i;
+    int nMoves = 0;
+    int nMaxMoves = s_CustomMaxMoves;
 
     if ( Abc_NtkNodeNum(pNtk) == 0 )
         return 0;
@@ -124,8 +134,20 @@ int Abc_NtkRetimeCustom( Abc_Ntk_t * pNtk, int fUseOldNames, int fVerbose )
 
     printf( "CUSTOM RETIMER: M7 entered.\n" );
 
-    // M7 v1: exactly one legal forward move.
-    fMoved = Abc_NtkRetimeOneForwardMove( pNtk, fVerbose );
+    // M7 : Randomly select lat to move until no moves are available.
+    for ( i = 0; i < nMaxMoves; i++ )
+    {
+        if ( fVerbose )
+            printf( "CUSTOM RETIMER: step %d.\n", i );
+
+        fMoved = Abc_NtkRetimeOneForwardMove(
+            pNtk, &RandState, fVerbose );
+
+        if ( !fMoved )
+            break;
+
+        nMoves++;
+    }
 
     // Normalize latches after retiming.
     Abc_NtkRetimeShareLatches( pNtk, 0 );
@@ -146,8 +168,8 @@ int Abc_NtkRetimeCustom( Abc_Ntk_t * pNtk, int fUseOldNames, int fVerbose )
                  "Abc_NtkRetimeCustom(): Network check has failed.\n" );
 
     if ( fVerbose )
-        printf( "CUSTOM RETIMER: one-move result = %s.\n",
-                fMoved ? "moved" : "no move" );
+        printf( "CUSTOM RETIMER: completed %d random forward moves.\n",
+                nMoves );
 
     return nLatches - Abc_NtkLatchNum(pNtk);
 }
@@ -157,7 +179,7 @@ int Abc_NtkRetimeCustom( Abc_Ntk_t * pNtk, int fUseOldNames, int fVerbose )
   Synopsis    [Prepares the network for retiming.]
 
   Description [Hash latches into their number in the original network.]
-               
+
   SideEffects []
 
   SeeAlso     []
@@ -174,12 +196,12 @@ int Abc_NtkRetimeCustom( Abc_Ntk_t * pNtk, int fUseOldNames, int fVerbose )
     {
         // map latch into its true number
         st__insert( tLatches, (char *)(ABC_PTRUINT_T)pLatch, (char *)(ABC_PTRUINT_T)(i-nOffSet) );
-        // disconnect LI     
+        // disconnect LI
         pLatchIn = Abc_ObjFanin0(pLatch);
         pFanin = Abc_ObjFanin0(pLatchIn);
         Abc_ObjTransferFanout( pLatchIn, pFanin );
         Abc_ObjDeleteFanin( pLatchIn, pFanin );
-        // disconnect LO     
+        // disconnect LO
         pLatchOut = Abc_ObjFanout0(pLatch);
         pFanin = Abc_ObjFanin0(pLatchOut);
         if ( Abc_ObjFanoutNum(pLatchOut) > 0 )
@@ -194,7 +216,7 @@ int Abc_NtkRetimeCustom( Abc_Ntk_t * pNtk, int fUseOldNames, int fVerbose )
   Synopsis    [Finalizes the latches after retiming.]
 
   Description [Reuses the LIs/LOs for old latches.]
-               
+
   SideEffects []
 
   SeeAlso     []
@@ -207,7 +229,7 @@ int Abc_NtkRetimeFinalizeLatches( Abc_Ntk_t * pNtk, st__table * tLatches, int nI
     int i, Index;
     // create new arrays
     vCisOld   = pNtk->vCis;    pNtk->vCis   = NULL;  vCisNew   = Vec_PtrAlloc( 100 );
-    vCosOld   = pNtk->vCos;    pNtk->vCos   = NULL;  vCosNew   = Vec_PtrAlloc( 100 );  
+    vCosOld   = pNtk->vCos;    pNtk->vCos   = NULL;  vCosNew   = Vec_PtrAlloc( 100 );
     vBoxesOld = pNtk->vBoxes;  pNtk->vBoxes = NULL;  vBoxesNew = Vec_PtrAlloc( 100 );
     // copy boxes and their CIs/COs
     Vec_PtrForEachEntryStop( Abc_Obj_t *, vCisOld, pObj, i, Vec_PtrSize(vCisOld) - st__count(tLatches) )
@@ -223,7 +245,7 @@ int Abc_NtkRetimeFinalizeLatches( Abc_Ntk_t * pNtk, st__table * tLatches, int nI
             continue;
         if ( Abc_ObjId(pLatch) >= (unsigned)nIdMaxStart )
         {
-            // this is a new latch 
+            // this is a new latch
             pLatchIn  = Abc_NtkCreateBi(pNtk);
             pLatchOut = Abc_NtkCreateBo(pNtk);
 
@@ -240,7 +262,7 @@ int Abc_NtkRetimeFinalizeLatches( Abc_Ntk_t * pNtk, st__table * tLatches, int nI
         }
         else
         {
-            // this is an old latch 
+            // this is an old latch
             // get its number in the original order
             if ( ! st__lookup_int( tLatches, (char *)pLatch, &Index ) )
             {
@@ -282,7 +304,7 @@ int Abc_NtkRetimeFinalizeLatches( Abc_Ntk_t * pNtk, st__table * tLatches, int nI
   Synopsis    [Performs retiming one way, forward or backward.]
 
   Description []
-               
+
   SideEffects []
 
   SeeAlso     []
@@ -335,6 +357,38 @@ int Abc_NtkRetimeOneWay( Abc_Ntk_t * pNtk, int fForward, int fVerbose )
     return 0;
 }
 
+void Abc_NtkRetimeCustomSetParams( unsigned Seed, int nMaxMoves )
+{
+    s_CustomSeed = Seed;
+    s_CustomMaxMoves = nMaxMoves;
+}
+
+static unsigned Abc_NtkRetimeRandomSeed( unsigned Seed )
+{
+    unsigned x = Seed;
+
+    x ^= x >> 16;
+    x *= 0x7feb352dU;
+    x ^= x >> 15;
+    x *= 0x846ca68bU;
+    x ^= x >> 16;
+
+    return x ? x : 1;
+}
+
+static unsigned Abc_NtkRetimeRandomNext( unsigned * pState )
+{
+    // xorshift32
+    unsigned x = *pState;
+
+    x ^= x << 13;
+    x ^= x >> 17;
+    x ^= x << 5;
+
+    *pState = x;
+    return x;
+}
+
 static Vec_Ptr_t * Abc_NtkRetimeCollectForwardMoves( Abc_Ntk_t * pNtk )
 {
     Vec_Ptr_t * vCandidates;
@@ -355,11 +409,12 @@ static Vec_Ptr_t * Abc_NtkRetimeCollectForwardMoves( Abc_Ntk_t * pNtk )
     return vCandidates;
 }
 
-static int Abc_NtkRetimeOneForwardMove( Abc_Ntk_t * pNtk, int fVerbose )
+static int Abc_NtkRetimeOneForwardMove( Abc_Ntk_t * pNtk, unsigned * pRandState, int fVerbose )
 {
     Vec_Ptr_t * vCandidates;
     Abc_Obj_t * pObj;
     int nCandidates;
+    int iCandidate;
 
     Abc_NtkRetimeTranferToCopy( pNtk );
 
@@ -381,11 +436,13 @@ static int Abc_NtkRetimeOneForwardMove( Abc_Ntk_t * pNtk, int fVerbose )
         return 0;
     }
 
-    pObj = (Abc_Obj_t *)Vec_PtrEntry( vCandidates, 0 );
+    unsigned Rand = Abc_NtkRetimeRandomNext( pRandState );
+    iCandidate = (int)(((word)Rand * (word)nCandidates) >> 32);
+    pObj = (Abc_Obj_t *)Vec_PtrEntry( vCandidates, iCandidate );
 
     if ( fVerbose )
-        printf( "CUSTOM RETIMER: selected candidate 0, node %d.\n",
-                Abc_ObjId(pObj) );
+        printf( "CUSTOM RETIMER: selected candidate %d, node %d.\n",
+                iCandidate, Abc_ObjId(pObj) );
 
     Abc_NtkRetimeNode( pObj, 1, 1 );
 
@@ -400,7 +457,7 @@ static int Abc_NtkRetimeOneForwardMove( Abc_Ntk_t * pNtk, int fVerbose )
   Synopsis    [Returns 1 if retiming forward/backward is possible.]
 
   Description []
-               
+
   SideEffects []
 
   SeeAlso     []
@@ -431,7 +488,7 @@ int Abc_NtkRetimeNodeIsEnabled( Abc_Obj_t * pObj, int fForward )
   Synopsis    [Retimes the node backward or forward.]
 
   Description []
-               
+
   SideEffects []
 
   SeeAlso     []
@@ -444,7 +501,7 @@ void Abc_NtkRetimeNode( Abc_Obj_t * pObj, int fForward, int fInitial )
     Abc_Obj_t * pNext, * pLatch;
     int i;
     vNodes = Vec_PtrAlloc( 10 );
-    if ( fForward ) 
+    if ( fForward )
     {
         // compute the initial value
         if ( fInitial )
@@ -457,7 +514,7 @@ void Abc_NtkRetimeNode( Abc_Obj_t * pObj, int fForward, int fInitial )
             assert( Abc_ObjIsLatch(pNext) );
             Abc_ObjPatchFanin( pObj, pNext, Abc_ObjFanin0(pNext) );
             if ( Abc_ObjFanoutNum(pNext) == 0 )
-                Abc_NtkDeleteObj(pNext);            
+                Abc_NtkDeleteObj(pNext);
         }
         // add a new latch on top
         pNext = Abc_NtkCreateLatch(pObj->pNtk);
@@ -488,7 +545,7 @@ void Abc_NtkRetimeNode( Abc_Obj_t * pObj, int fForward, int fInitial )
         {
             assert( Abc_ObjIsLatch(pNext) );
             Abc_ObjTransferFanout( pNext, pObj );
-            Abc_NtkDeleteObj( pNext );  
+            Abc_NtkDeleteObj( pNext );
         }
         // add new latches to the fanins
         Abc_ObjForEachFanin( pObj, pNext, i )
@@ -513,7 +570,7 @@ void Abc_NtkRetimeNode( Abc_Obj_t * pObj, int fForward, int fInitial )
   Synopsis    [Returns the number of compatible fanout latches.]
 
   Description []
-               
+
   SideEffects []
 
   SeeAlso     []
@@ -543,7 +600,7 @@ int Abc_NtkRetimeCheckCompatibleLatchFanouts( Abc_Obj_t * pObj )
   Synopsis    [Retimes the node backward or forward.]
 
   Description []
-               
+
   SideEffects []
 
   SeeAlso     []

@@ -47,6 +47,8 @@ ABC_NAMESPACE_HEADER_START
 ///                    FUNCTION DECLARATIONS                         ///
 ////////////////////////////////////////////////////////////////////////
 
+extern void Abc_NtkRetimeCustomSetParams( unsigned Seed, int nMaxMoves );
+
 /*=== retArea.c ========================================================*/
 extern int         Abc_NtkRetimeMinArea( Abc_Ntk_t * pNtk, int fForwardOnly, int fBackwardOnly, int fUseOldNames, int fVerbose );
 /*=== retCore.c ========================================================*/

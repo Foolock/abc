@@ -24898,6 +24898,8 @@ int Abc_CommandRetime( Abc_Frame_t * pAbc, int argc, char ** argv )
     int fVerbose;
     int Mode;
     int nDelayLim;
+    int nRandomSeed;
+    int nRandomMoves;
 
     pNtk = Abc_FrameReadNtk(pAbc);
     // set defaults
@@ -24909,8 +24911,10 @@ int Abc_CommandRetime( Abc_Frame_t * pAbc, int argc, char ** argv )
     fUseOldNames = 0;
     fVerbose  =  0;
     nMaxIters = 15;
+    nRandomSeed  = 1;
+    nRandomMoves = 100;
     Extra_UtilGetoptReset();
-    while ( ( c = Extra_UtilGetopt( argc, argv, "MDfbsovh" ) ) != EOF )
+    while ( ( c = Extra_UtilGetopt( argc, argv, "MDSNfbsovh" ) ) != EOF )
     {
         switch ( c )
         {
@@ -24934,6 +24938,28 @@ int Abc_CommandRetime( Abc_Frame_t * pAbc, int argc, char ** argv )
             nDelayLim = atoi(argv[globalUtilOptind]);
             globalUtilOptind++;
             if ( nDelayLim < 0 )
+                goto usage;
+            break;
+        case 'S':
+            if ( globalUtilOptind >= argc )
+            {
+                Abc_Print( -1, "Command line switch \"-S\" should be followed by a positive integer.\n" );
+                goto usage;
+            }
+            nRandomSeed = atoi(argv[globalUtilOptind]);
+            globalUtilOptind++;
+            if ( nRandomSeed <= 0 )
+                goto usage;
+            break;
+        case 'N':
+            if ( globalUtilOptind >= argc )
+            {
+                Abc_Print( -1, "Command line switch \"-N\" should be followed by a non-negative integer.\n" );
+                goto usage;
+            }
+            nRandomMoves = atoi(argv[globalUtilOptind]);
+            globalUtilOptind++;
+            if ( nRandomMoves < 0 )
                 goto usage;
             break;
         case 'f':
@@ -24982,6 +25008,10 @@ int Abc_CommandRetime( Abc_Frame_t * pAbc, int argc, char ** argv )
         return 0;
     }
 
+    if ( Mode == 7 )
+        Abc_NtkRetimeCustomSetParams(
+            (unsigned)nRandomSeed, nRandomMoves );
+
     if ( Abc_NtkIsStrash(pNtk) )
     {
         if ( Abc_NtkGetChoiceNum(pNtk) )
@@ -25027,6 +25057,8 @@ usage:
     Abc_Print( -2, "\t             7: custom retiming\n" );
     Abc_Print( -2, "\t-M num : the retiming algorithm to use [default = %d]\n", Mode );
     Abc_Print( -2, "\t-D num : the minimum delay target (0=unused) [default = %d]\n", nDelayLim );
+    Abc_Print( -2, "\t-S num : random seed for custom mode 7 [default = %d]\n", nRandomSeed );
+    Abc_Print( -2, "\t-N num : maximum random moves for custom mode 7 [default = %d]\n", nRandomMoves );
     Abc_Print( -2, "\t-f     : enables forward-only retiming in modes 3,4,5 [default = %s]\n", fForward? "yes": "no" );
     Abc_Print( -2, "\t-b     : enables backward-only retiming in modes 3,4,5 [default = %s]\n", fBackward? "yes": "no" );
     Abc_Print( -2, "\t-s     : enables retiming one step only in mode 4 [default = %s]\n", fOneStep? "yes": "no" );

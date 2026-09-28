@@ -134,6 +134,8 @@ int Abc_NtkRetimeCustom( Abc_Ntk_t * pNtk, int fUseOldNames, int fVerbose )
 
     printf( "CUSTOM RETIMER: M7 entered.\n" );
 
+    Abc_NtkRetimeTranferToCopy( pNtk );
+
     // M7 : Randomly select lat to move until no moves are available.
     for ( i = 0; i < nMaxMoves; i++ )
     {
@@ -148,6 +150,8 @@ int Abc_NtkRetimeCustom( Abc_Ntk_t * pNtk, int fUseOldNames, int fVerbose )
 
         nMoves++;
     }
+
+    Abc_NtkRetimeTranferFromCopy( pNtk );
 
     // Normalize latches after retiming.
     Abc_NtkRetimeShareLatches( pNtk, 0 );
@@ -416,8 +420,6 @@ static int Abc_NtkRetimeOneForwardMove( Abc_Ntk_t * pNtk, unsigned * pRandState,
     int nCandidates;
     int iCandidate;
 
-    Abc_NtkRetimeTranferToCopy( pNtk );
-
     vCandidates = Abc_NtkRetimeCollectForwardMoves( pNtk );
     nCandidates = Vec_PtrSize( vCandidates );
 
@@ -428,7 +430,6 @@ static int Abc_NtkRetimeOneForwardMove( Abc_Ntk_t * pNtk, unsigned * pRandState,
     if ( nCandidates == 0 )
     {
         Vec_PtrFree( vCandidates );
-        Abc_NtkRetimeTranferFromCopy( pNtk );
 
         if ( fVerbose )
             printf( "CUSTOM RETIMER: no legal forward move found.\n" );
@@ -447,8 +448,6 @@ static int Abc_NtkRetimeOneForwardMove( Abc_Ntk_t * pNtk, unsigned * pRandState,
     Abc_NtkRetimeNode( pObj, 1, 1 );
 
     Vec_PtrFree( vCandidates );
-    Abc_NtkRetimeTranferFromCopy( pNtk );
-
     return 1;
 }
 

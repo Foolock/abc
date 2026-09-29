@@ -197,9 +197,44 @@ int Abc_NtkRetimeCustom( Abc_Ntk_t * pNtk, int fUseOldNames, int fVerbose )
     printf( "CUSTOM RETIMER: legal backward moves at entry = %d.\n",
             Abc_NtkRetimeCountLegalMoves( pNtk, 0 ) );
 
-    // Run one backward random phase for backward-phase validation.
-    nMoves = Abc_NtkRetimeRandomPhase(
-        pNtk, 0, nMaxMoves, &RandState, fVerbose );
+    // Alternate complete forward/backward random phases.
+    // Each phase owns its direction-specific initialization lifecycle.
+    {
+        const int nPhaseMoves = 5;
+        int fForward = 1;
+        int nEmptyPhases = 0;
+
+        while ( nMoves < nMaxMoves && nEmptyPhases < 2 )
+        {
+            int nThisPhase = nMaxMoves - nMoves;
+            int nMoved;
+
+            if ( nThisPhase > nPhaseMoves )
+                nThisPhase = nPhaseMoves;
+
+            if ( fVerbose )
+                printf( "CUSTOM RETIMER: begin %s phase, budget = %d.\n",
+                        fForward ? "forward" : "backward",
+                        nThisPhase );
+
+            nMoved = Abc_NtkRetimeRandomPhase(
+                pNtk, fForward, nThisPhase, &RandState, fVerbose );
+
+            nMoves += nMoved;
+
+            if ( fVerbose )
+                printf( "CUSTOM RETIMER: end %s phase, moved = %d, total = %d.\n",
+                        fForward ? "forward" : "backward",
+                        nMoved, nMoves );
+
+            if ( nMoved == 0 )
+                nEmptyPhases++;
+            else
+                nEmptyPhases = 0;
+
+            fForward = !fForward;
+        }
+    }
 
     // Normalize latches after retiming.
     Abc_NtkRetimeShareLatches( pNtk, 0 );
@@ -220,7 +255,7 @@ int Abc_NtkRetimeCustom( Abc_Ntk_t * pNtk, int fUseOldNames, int fVerbose )
                  "Abc_NtkRetimeCustom(): Network check has failed.\n" );
 
     if ( fVerbose )
-        printf( "CUSTOM RETIMER: completed %d random backward moves.\n",
+        printf( "CUSTOM RETIMER: completed %d bidirectional random moves.\n",
                 nMoves );
 
     return nLatches - Abc_NtkLatchNum(pNtk);

@@ -31,8 +31,9 @@ static unsigned s_CustomSeed = 1;
 static int s_CustomMaxMoves = 100;
 
 static int Abc_NtkRetimeOneWay( Abc_Ntk_t * pNtk, int fForward, int fVerbose );
-static int Abc_NtkRetimeOneForwardMove( Abc_Ntk_t * pNtk, unsigned * pRandState, int fVerbose );
-static Vec_Ptr_t * Abc_NtkRetimeCollectForwardMoves( Abc_Ntk_t * pNtk );
+static int Abc_NtkRetimeOneRandomMove( Abc_Ntk_t * pNtk, int fForward, unsigned * pRandState, int fVerbose );
+static Vec_Ptr_t * Abc_NtkRetimeCollectMoves( Abc_Ntk_t * pNtk, int fForward );
+static int Abc_NtkRetimeCountLegalMoves( Abc_Ntk_t * pNtk, int fForward );
 static unsigned Abc_NtkRetimeRandomNext( unsigned * pState );
 void Abc_NtkRetimeCustomSetParams( unsigned Seed, int nMaxMoves );
 static unsigned Abc_NtkRetimeRandomSeed( unsigned Seed );
@@ -103,6 +104,22 @@ int Abc_NtkRetimeIncremental( Abc_Ntk_t * pNtk, int nDelayLim, int fForward, int
     return nLatches - Abc_NtkLatchNum(pNtk);
 }
 
+static int Abc_NtkRetimeCountLegalMoves( Abc_Ntk_t * pNtk, int fForward )
+{
+    Abc_Obj_t * pObj;
+    int i;
+    int nMoves = 0;
+
+    Abc_NtkForEachObj( pNtk, pObj, i )
+    {
+        if ( !Abc_ObjIsNode(pObj) )
+            continue;
+        if ( Abc_NtkRetimeNodeIsEnabled( pObj, fForward ) )
+            nMoves++;
+    }
+    return nMoves;
+}
+
 int Abc_NtkRetimeCustom( Abc_Ntk_t * pNtk, int fUseOldNames, int fVerbose )
 {
     Vec_Ptr_t * vBoxes;
@@ -134,6 +151,11 @@ int Abc_NtkRetimeCustom( Abc_Ntk_t * pNtk, int fUseOldNames, int fVerbose )
 
     printf( "CUSTOM RETIMER: M7 entered.\n" );
 
+    printf( "CUSTOM RETIMER: legal forward moves at entry = %d.\n",
+            Abc_NtkRetimeCountLegalMoves( pNtk, 1 ) );
+    printf( "CUSTOM RETIMER: legal backward moves at entry = %d.\n",
+            Abc_NtkRetimeCountLegalMoves( pNtk, 0 ) );
+
     Abc_NtkRetimeTranferToCopy( pNtk );
 
     // M7 : Randomly select lat to move until no moves are available.
@@ -142,8 +164,8 @@ int Abc_NtkRetimeCustom( Abc_Ntk_t * pNtk, int fUseOldNames, int fVerbose )
         if ( fVerbose )
             printf( "CUSTOM RETIMER: step %d.\n", i );
 
-        fMoved = Abc_NtkRetimeOneForwardMove(
-            pNtk, &RandState, fVerbose );
+        fMoved = Abc_NtkRetimeOneRandomMove(
+            pNtk, 1, &RandState, fVerbose );
 
         if ( !fMoved )
             break;
@@ -393,7 +415,7 @@ static unsigned Abc_NtkRetimeRandomNext( unsigned * pState )
     return x;
 }
 
-static Vec_Ptr_t * Abc_NtkRetimeCollectForwardMoves( Abc_Ntk_t * pNtk )
+static Vec_Ptr_t * Abc_NtkRetimeCollectMoves( Abc_Ntk_t * pNtk, int fForward )
 {
     Vec_Ptr_t * vCandidates;
     Abc_Obj_t * pObj;
@@ -406,33 +428,34 @@ static Vec_Ptr_t * Abc_NtkRetimeCollectForwardMoves( Abc_Ntk_t * pNtk )
         if ( !Abc_ObjIsNode(pObj) )
             continue;
 
-        if ( Abc_NtkRetimeNodeIsEnabled( pObj, 1 ) )
+        if ( Abc_NtkRetimeNodeIsEnabled( pObj, fForward ) )
             Vec_PtrPush( vCandidates, pObj );
     }
 
     return vCandidates;
 }
 
-static int Abc_NtkRetimeOneForwardMove( Abc_Ntk_t * pNtk, unsigned * pRandState, int fVerbose )
+static int Abc_NtkRetimeOneRandomMove( Abc_Ntk_t * pNtk, int fForward, unsigned * pRandState, int fVerbose )
 {
     Vec_Ptr_t * vCandidates;
     Abc_Obj_t * pObj;
     int nCandidates;
     int iCandidate;
 
-    vCandidates = Abc_NtkRetimeCollectForwardMoves( pNtk );
+    vCandidates = Abc_NtkRetimeCollectMoves( pNtk, fForward );
     nCandidates = Vec_PtrSize( vCandidates );
 
     if ( fVerbose )
-        printf( "CUSTOM RETIMER: legal forward moves = %d.\n",
-                nCandidates );
+        printf( "CUSTOM RETIMER: legal %s moves = %d.\n",
+                fForward ? "forward" : "backward", nCandidates );
 
     if ( nCandidates == 0 )
     {
         Vec_PtrFree( vCandidates );
 
         if ( fVerbose )
-            printf( "CUSTOM RETIMER: no legal forward move found.\n" );
+            printf( "CUSTOM RETIMER: no legal %s move found.\n",
+                    fForward ? "forward" : "backward" );
 
         return 0;
     }
@@ -445,7 +468,7 @@ static int Abc_NtkRetimeOneForwardMove( Abc_Ntk_t * pNtk, unsigned * pRandState,
         printf( "CUSTOM RETIMER: selected candidate %d, node %d.\n",
                 iCandidate, Abc_ObjId(pObj) );
 
-    Abc_NtkRetimeNode( pObj, 1, 1 );
+    Abc_NtkRetimeNode( pObj, fForward, 1 );
 
     Vec_PtrFree( vCandidates );
     return 1;

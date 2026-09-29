@@ -108,6 +108,7 @@ int Abc_NtkRetimeIncremental( Abc_Ntk_t * pNtk, int nDelayLim, int fForward, int
 static int Abc_NtkRetimeCountLegalMoves( Abc_Ntk_t * pNtk, int fForward )
 {
     Abc_Obj_t * pObj;
+    int i;
     int nMoves = 0;
 
     Abc_NtkForEachObj( pNtk, pObj, i )
@@ -170,7 +171,6 @@ int Abc_NtkRetimeCustom( Abc_Ntk_t * pNtk, int fUseOldNames, int fVerbose )
     int nIdMaxStart = Abc_NtkObjNumMax(pNtk);
     int RetValue;
     unsigned RandState = Abc_NtkRetimeRandomSeed( s_CustomSeed );
-    int i;
     int nMoves = 0;
     int nMaxMoves = s_CustomMaxMoves;
 

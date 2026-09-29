@@ -32,6 +32,7 @@ static int s_CustomMaxMoves = 100;
 
 static int Abc_NtkRetimeOneWay( Abc_Ntk_t * pNtk, int fForward, int fVerbose );
 static int Abc_NtkRetimeOneRandomMove( Abc_Ntk_t * pNtk, int fForward, unsigned * pRandState, int fVerbose );
+static int Abc_NtkRetimeRandomPhase( Abc_Ntk_t * pNtk, int fForward, int nMaxMoves, unsigned * pRandState, int fVerbose );
 static Vec_Ptr_t * Abc_NtkRetimeCollectMoves( Abc_Ntk_t * pNtk, int fForward );
 static int Abc_NtkRetimeCountLegalMoves( Abc_Ntk_t * pNtk, int fForward );
 static unsigned Abc_NtkRetimeRandomNext( unsigned * pState );
@@ -107,7 +108,6 @@ int Abc_NtkRetimeIncremental( Abc_Ntk_t * pNtk, int nDelayLim, int fForward, int
 static int Abc_NtkRetimeCountLegalMoves( Abc_Ntk_t * pNtk, int fForward )
 {
     Abc_Obj_t * pObj;
-    int i;
     int nMoves = 0;
 
     Abc_NtkForEachObj( pNtk, pObj, i )
@@ -120,6 +120,48 @@ static int Abc_NtkRetimeCountLegalMoves( Abc_Ntk_t * pNtk, int fForward )
     return nMoves;
 }
 
+static int Abc_NtkRetimeRandomPhase( Abc_Ntk_t * pNtk, int fForward,
+    int nMaxMoves, unsigned * pRandState, int fVerbose )
+{
+    Abc_Ntk_t * pNtkNew = NULL;
+    Vec_Int_t * vValues = NULL;
+    int i;
+    int nMoves = 0;
+
+    if ( fForward )
+        Abc_NtkRetimeTranferToCopy( pNtk );
+    else
+    {
+        vValues = Abc_NtkRetimeCollectLatchValues( pNtk );
+        pNtkNew = Abc_NtkRetimeBackwardInitialStart( pNtk );
+    }
+
+    for ( i = 0; i < nMaxMoves; i++ )
+    {
+        if ( fVerbose )
+            printf( "CUSTOM RETIMER: %s step %d.\n",
+                    fForward ? "forward" : "backward", i );
+
+        if ( !Abc_NtkRetimeOneRandomMove(
+                 pNtk, fForward, pRandState, fVerbose ) )
+            break;
+
+        nMoves++;
+    }
+
+    if ( fForward )
+        Abc_NtkRetimeTranferFromCopy( pNtk );
+    else
+    {
+        Abc_NtkRetimeBackwardInitialFinish(
+            pNtk, pNtkNew, vValues, fVerbose );
+        Abc_NtkDelete( pNtkNew );
+        Vec_IntFree( vValues );
+    }
+
+    return nMoves;
+}
+
 int Abc_NtkRetimeCustom( Abc_Ntk_t * pNtk, int fUseOldNames, int fVerbose )
 {
     Vec_Ptr_t * vBoxes;
@@ -127,7 +169,6 @@ int Abc_NtkRetimeCustom( Abc_Ntk_t * pNtk, int fUseOldNames, int fVerbose )
     int nLatches = Abc_NtkLatchNum(pNtk);
     int nIdMaxStart = Abc_NtkObjNumMax(pNtk);
     int RetValue;
-    int fMoved;
     unsigned RandState = Abc_NtkRetimeRandomSeed( s_CustomSeed );
     int i;
     int nMoves = 0;
@@ -156,24 +197,9 @@ int Abc_NtkRetimeCustom( Abc_Ntk_t * pNtk, int fUseOldNames, int fVerbose )
     printf( "CUSTOM RETIMER: legal backward moves at entry = %d.\n",
             Abc_NtkRetimeCountLegalMoves( pNtk, 0 ) );
 
-    Abc_NtkRetimeTranferToCopy( pNtk );
-
-    // M7 : Randomly select lat to move until no moves are available.
-    for ( i = 0; i < nMaxMoves; i++ )
-    {
-        if ( fVerbose )
-            printf( "CUSTOM RETIMER: step %d.\n", i );
-
-        fMoved = Abc_NtkRetimeOneRandomMove(
-            pNtk, 1, &RandState, fVerbose );
-
-        if ( !fMoved )
-            break;
-
-        nMoves++;
-    }
-
-    Abc_NtkRetimeTranferFromCopy( pNtk );
+    // Run one backward random phase for backward-phase validation.
+    nMoves = Abc_NtkRetimeRandomPhase(
+        pNtk, 0, nMaxMoves, &RandState, fVerbose );
 
     // Normalize latches after retiming.
     Abc_NtkRetimeShareLatches( pNtk, 0 );
@@ -194,7 +220,7 @@ int Abc_NtkRetimeCustom( Abc_Ntk_t * pNtk, int fUseOldNames, int fVerbose )
                  "Abc_NtkRetimeCustom(): Network check has failed.\n" );
 
     if ( fVerbose )
-        printf( "CUSTOM RETIMER: completed %d random forward moves.\n",
+        printf( "CUSTOM RETIMER: completed %d random backward moves.\n",
                 nMoves );
 
     return nLatches - Abc_NtkLatchNum(pNtk);
